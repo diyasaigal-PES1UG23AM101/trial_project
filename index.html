@@ -72,13 +72,6 @@
                     <input type="text" id="mfaCode" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter MFA code" maxlength="6">
                     <p class="text-xs text-gray-500 mt-1">Mock MFA Code: 123456</p>
                 </div>
-                <div class="flex items-center">
-                    <input type="checkbox" id="biometricToggle" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
-                    <label for="biometricToggle" class="ml-2 text-sm text-gray-700">Enable Biometric Login (Future Enhancement)</label>
-                </div>
-                <button type="button" id="biometricLoginBtn" disabled class="w-full bg-gray-400 text-white py-2 px-4 rounded-lg cursor-not-allowed text-sm mb-2">
-                    Biometric Login (Disabled)
-                </button>
                 <div id="loginError" class="hidden text-red-600 text-sm"></div>
                 <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
                     Login
@@ -759,12 +752,12 @@
             }
         }
 
-        async function login(username, password, useBiometric, mfaCode) {
+        async function login(username, password, mfaCode) {
             try {
                 const response = await fetch(`${API_BASE}/auth/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password, useBiometric, mfaCode })
+                    body: JSON.stringify({ username, password, mfaCode })
                 });
                 const data = await response.json();
                 
@@ -2365,9 +2358,8 @@
                 e.preventDefault();
                 const username = document.getElementById('loginUsername').value;
                 const password = document.getElementById('loginPassword').value;
-                const useBiometric = document.getElementById('biometricToggle').checked;
                 const mfaCode = document.getElementById('mfaCode').value;
-                login(username, password, useBiometric, mfaCode);
+                login(username, password, mfaCode);
             });
 
             // Logout
