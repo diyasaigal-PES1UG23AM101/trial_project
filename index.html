@@ -396,7 +396,7 @@
                 </div>
             </section>
 
-            <!-- Critical Alerts Section (Admin Only) -->
+            <!-- Critical Alerts Section (Admin & IT Staff) -->
             <section id="criticalAlertsSection" class="mb-6 sm:mb-8 hidden">
                 <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">Critical Alerts</h2>
                 <div id="criticalAlertsContent" class="space-y-4">
@@ -1629,15 +1629,22 @@
             const content = document.getElementById('criticalAlertsContent');
             if (!section || !content) return;
 
-            const hasAlerts = (hardwareAlerts && hardwareAlerts.length > 0) || (networkAlerts && networkAlerts.length > 0);
-
-            if ((currentRole || '').toLowerCase() !== 'admin' || !hasAlerts) {
+            const role = (currentRole || '').toLowerCase();
+            const canViewAlerts = role === 'admin' || role === 'it staff';
+            if (!canViewAlerts) {
                 section.classList.add('hidden');
                 content.innerHTML = '<p class="text-sm text-gray-500">No active alerts.</p>';
                 return;
             }
 
             section.classList.remove('hidden');
+
+            const hasAlerts = (hardwareAlerts && hardwareAlerts.length > 0) || (networkAlerts && networkAlerts.length > 0);
+            if (!hasAlerts) {
+                content.innerHTML = '<p class="text-sm text-gray-500">No active alerts.</p>';
+                return;
+            }
+
             content.innerHTML = '';
 
             if (hardwareAlerts && hardwareAlerts.length > 0) {
@@ -1646,6 +1653,7 @@
                 const items = hardwareAlerts.map(alert => `
                     <li class="text-sm text-red-700">
                         <span class="font-semibold">${alert.deviceId}</span> -
+                        Status: ALERT -
                         CPU ${alert.cpuLoad}% / Memory ${alert.memoryUtil}% -
                         Overheating: ${alert.isOverheating ? 'Yes' : 'No'} -
                         Last Check: ${alert.lastCheck}
@@ -1666,6 +1674,7 @@
                 const items = networkAlerts.map(alert => `
                     <li class="text-sm text-yellow-800">
                         <span class="font-semibold">${alert.deviceId}</span> -
+                        Status: ISSUE -
                         Bandwidth ${alert.bandwidthMB} MB -
                         Downtime: ${alert.isDowntime ? 'Yes' : 'No'} -
                         Abnormal Traffic: ${alert.abnormalTraffic ? 'Yes' : 'No'}
