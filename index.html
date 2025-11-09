@@ -355,6 +355,29 @@
                 </div>
             </section>
 
+            <!-- Asset Logs Section (Admin Only) -->
+            <section id="assetLogsSection" class="mb-6 sm:mb-8 hidden">
+                <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">Asset Logs</h2>
+                <div class="bg-white rounded-lg shadow-md overflow-hidden table-container">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Timestamp</th>
+                                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asset ID</th>
+                                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assigned User</th>
+                                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="assetLogsTableBody" class="bg-white divide-y divide-gray-200">
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="assetLogsEmptyState" class="hidden text-sm text-gray-500 mt-2">No asset activity recorded yet.</p>
+            </section>
+
             <!-- Audit Log Section (ITM-SR-004) - Admin/IT Staff Only -->
             <section id="auditLog" class="mb-6 sm:mb-8">
                 <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">Audit Log</h2>
@@ -656,6 +679,19 @@
                 } else {
                     reportCsvBtn.classList.add('hidden');
                     reportCsvBtn.disabled = true;
+                }
+            }
+            const assetLogsSection = document.getElementById('assetLogsSection');
+            if (assetLogsSection) {
+                if (currentRole === 'Admin') {
+                    assetLogsSection.classList.remove('hidden');
+                    loadAssetLogs();
+                } else {
+                    assetLogsSection.classList.add('hidden');
+                    const tbody = document.getElementById('assetLogsTableBody');
+                    if (tbody) tbody.innerHTML = '';
+                    const emptyState = document.getElementById('assetLogsEmptyState');
+                    if (emptyState) emptyState.classList.add('hidden');
                 }
             }
         }
@@ -1260,6 +1296,44 @@
             }
         }
 
+        async function loadAssetLogs() {
+            if ((currentRole || '').toLowerCase() !== 'admin') return;
+            try {
+                const response = await fetch(`${API_BASE}/assets/logs`);
+                if (!response.ok) {
+                    if (response.status === 403) {
+                        document.getElementById('assetLogsSection').classList.add('hidden');
+                    }
+                    return;
+                }
+                const logs = await response.json();
+                const tbody = document.getElementById('assetLogsTableBody');
+                const emptyState = document.getElementById('assetLogsEmptyState');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                if (!Array.isArray(logs) || logs.length === 0) {
+                    if (emptyState) emptyState.classList.remove('hidden');
+                    return;
+                }
+                if (emptyState) emptyState.classList.add('hidden');
+
+                logs.forEach(log => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">${log.timestamp}</td>
+                        <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900">${log.assetId}</td>
+                        <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">${log.action}</td>
+                        <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">${log.assetType || '-'}</td>
+                        <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">${log.assignedUser || '-'}</td>
+                        <td class="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-500">${log.details || '-'}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Error loading asset logs:', error);
+            }
+        }
+
         function populateReportsModal(reportData) {
             const content = document.getElementById('reportsContent');
             const generatedAtEl = document.getElementById('reportGeneratedAt');
@@ -1413,8 +1487,9 @@
             loadNetwork();
             loadBackup();
             loadAuditLog();
-            if (currentRole === 'Admin') {
+            if ((currentRole || '').toLowerCase() === 'admin') {
                 loadUsers();
+                loadAssetLogs();
             }
         }
 

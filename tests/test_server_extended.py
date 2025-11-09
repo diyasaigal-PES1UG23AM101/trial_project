@@ -406,6 +406,34 @@ class IIMSExtendedTestCase(unittest.TestCase):
                                 json={'jobId': 'BK-001', 'comment': 'Should not be saved'})
         self.assertEqual(response.status_code, 403)
 
+    def test_admin_can_view_asset_logs(self):
+        """Admin should see asset logs when assets are modified"""
+        self.app.post('/api/auth/login',
+                     json={'username': 'admin', 'password': 'admin123', 'mfaCode': '123456'})
+        self.app.post('/api/assets',
+                     json={
+                         'action': 'create',
+                         'assetId': 'TEST-ASSET-001',
+                         'assetType': 'Test Device',
+                         'assignedUser': 'QA User',
+                         'purchaseDate': '2024-01-01',
+                         'warrantyExpiryDate': '2027-01-01',
+                         'department': 'QA',
+                         'status': 'Active'
+                     })
+        response = self.app.get('/api/assets/logs')
+        self.assertEqual(response.status_code, 200)
+        logs = json.loads(response.data)
+        self.assertGreater(len(logs), 0)
+        self.assertTrue(any(log['assetId'] == 'TEST-ASSET-001' and log['action'] == 'CREATE' for log in logs))
+
+    def test_itstaff_cannot_view_asset_logs(self):
+        """Only Admin can access asset logs"""
+        self.app.post('/api/auth/login',
+                     json={'username': 'itstaff', 'password': 'it123'})
+        response = self.app.get('/api/assets/logs')
+        self.assertEqual(response.status_code, 403)
+
     def test_employee_cannot_comment_on_backup(self):
         """Employees are denied backup comment updates"""
         self.app.post('/api/auth/login',

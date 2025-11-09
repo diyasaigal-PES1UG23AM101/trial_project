@@ -152,6 +152,29 @@ class AuditLog(db.Model):
         }
 
 
+class AssetLog(db.Model):
+    __tablename__ = "asset_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    asset_id = db.Column(db.String(64), nullable=False)
+    action = db.Column(db.String(32), nullable=False)
+    details = db.Column(db.String(256))
+    asset_type = db.Column(db.String(64))
+    assigned_user = db.Column(db.String(128))
+    performed_by = db.Column(db.String(32), nullable=False, default="System")
+
+    def to_dict(self):
+        return {
+            "timestamp": self.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            "assetId": self.asset_id,
+            "action": self.action,
+            "details": self.details,
+            "assetType": self.asset_type,
+            "assignedUser": self.assigned_user,
+        }
+
+
 class IntegrationStatus(db.Model):
     __tablename__ = "integration_statuses"
 
@@ -216,6 +239,22 @@ def add_audit_log(action, details, user_role, commit=True):
     if commit:
         db.session.commit()
     return log_entry.to_dict()
+
+
+def add_asset_log(asset_id, action, details, user_role, asset_type=None, assigned_user=None):
+    """Persist asset-specific change log."""
+    entry = AssetLog(
+        asset_id=asset_id,
+        action=action,
+        details=details,
+        asset_type=asset_type,
+        assigned_user=assigned_user,
+        performed_by=user_role or "System",
+        timestamp=datetime.utcnow(),
+    )
+    db.session.add(entry)
+    db.session.commit()
+    return entry.to_dict()
 
 
 def can_perform_crud(role):
@@ -360,6 +399,22 @@ def ensure_backup_comment_column():
     if "technician_comment" not in columns:
         with db.engine.connect() as connection:
             connection.execute(db.text("ALTER TABLE backup_jobs ADD COLUMN technician_comment VARCHAR(512)"))
+            connection.commit()
+
+
+def ensure_asset_log_columns():
+    """Ensure new columns exist on asset_logs table."""
+    inspector = db.inspect(db.engine)
+    columns = [col["name"] for col in inspector.get_columns("asset_logs")]
+    statements = []
+    if "asset_type" not in columns:
+        statements.append("ALTER TABLE asset_logs ADD COLUMN asset_type VARCHAR(64)")
+    if "assigned_user" not in columns:
+        statements.append("ALTER TABLE asset_logs ADD COLUMN assigned_user VARCHAR(128)")
+    if statements:
+        with db.engine.connect() as connection:
+            for stmt in statements:
+                connection.execute(db.text(stmt))
             connection.commit()
 
 
@@ -635,6 +690,7 @@ def initialize_database(reset=False):
             db.drop_all()
         db.create_all()
         ensure_backup_comment_column()
+        ensure_asset_log_columns()
         seed_initial_data()
 
 
@@ -697,6 +753,14 @@ def assets():
             db.session.add(asset)
             db.session.commit()
             add_audit_log("CREATE", f"Created asset {asset.asset_id}", current_role)
+            add_asset_log(
+                asset.asset_id,
+                "CREATE",
+                f"{asset.asset_type} assigned to {asset.assigned_user}",
+                current_role,
+                asset_type=asset.asset_type,
+                assigned_user=asset.assigned_user,
+            )
             return jsonify(asset.to_dict()), 201
         
         elif action == 'update':
@@ -725,6 +789,28 @@ def assets():
                 asset.department = data['department']
             db.session.commit()
             add_audit_log("UPDATE", f"Updated asset {asset_id}", current_role)
+            changes = []
+            if 'assetType' in data:
+                changes.append(f"type -> {asset.asset_type}")
+            if 'assignedUser' in data:
+                changes.append(f"user -> {asset.assigned_user}")
+            if 'purchaseDate' in data:
+                changes.append(f"purchase -> {asset.purchase_date}")
+            if 'warrantyExpiryDate' in data:
+                changes.append(f"warranty -> {asset.warranty_expiry_date}")
+            if 'status' in data:
+                changes.append(f"status -> {asset.status}")
+            if 'department' in data:
+                changes.append(f"department -> {asset.department}")
+            detail_message = "; ".join(changes) if changes else "Asset updated"
+            add_asset_log(
+                asset_id,
+                "UPDATE",
+                detail_message,
+                current_role,
+                asset_type=asset.asset_type,
+                assigned_user=asset.assigned_user,
+            )
             return jsonify(asset.to_dict())
         
         elif action == 'delete':
@@ -735,6 +821,14 @@ def assets():
             db.session.delete(asset)
             db.session.commit()
             add_audit_log("DELETE", f"Deleted asset {asset_id}", current_role)
+            add_asset_log(
+                asset_id,
+                "DELETE",
+                "Asset removed from inventory",
+                current_role,
+                asset_type=asset.asset_type,
+                assigned_user=asset.assigned_user,
+            )
             return jsonify(asset.to_dict())
 
 @app.route('/api/licenses', methods=['GET', 'POST'])
@@ -848,6 +942,16 @@ def backup_comment():
     db.session.commit()
     add_audit_log("BACKUP_COMMENT", f"Updated backup comment for {job_id}", current_role)
     return jsonify(job.to_dict())
+
+@app.route('/api/assets/logs', methods=['GET'])
+def asset_logs():
+    """Admin-only access to asset change logs."""
+    global current_role, is_authenticated
+    if not is_authenticated or current_role != "Admin":
+        return jsonify({"error": "Insufficient permissions"}), 403
+
+    logs = AssetLog.query.order_by(AssetLog.timestamp.desc()).all()
+    return jsonify([log.to_dict() for log in logs])
 
 @app.route('/api/users', methods=['GET', 'POST'])
 def manage_users():

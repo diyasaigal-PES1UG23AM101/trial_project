@@ -9,6 +9,7 @@ A comprehensive full-stack application prototype for managing IT infrastructure 
 - **Monitoring**: Hardware health, network usage, and backup status
 - **Role-Based Access Control**: Admin, IT Staff, and Employee roles
 - **User Provisioning**: Admins can create new users and assign IT Staff or Employee roles
+- **Asset Change Tracking**: Admin-only asset change log with per-event details
 - **Employee Asset Visibility**: Admins can inspect assets assigned to any employee
 - **Comprehensive Reporting**: One-click operational reports covering assets, licenses, monitoring, backups, and department usage
 - **Authentication**: Login with MFA support for Admin users
@@ -56,6 +57,7 @@ A comprehensive full-stack application prototype for managing IT infrastructure 
    - Login as `admin` / `admin123` (MFA `123456`)
    - Use the “Generate Reports” button on the dashboard to view real-time summaries across assets, licensing, monitoring, backups, and departmental usage
    - Download the same summary as a CSV file with the adjacent “Download CSV” action for offline analysis
+   - Review asset change history via the Asset Logs section (Admin only)
 
 ### Docker Deployment
 
