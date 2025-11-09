@@ -50,6 +50,29 @@ class Asset(db.Model):
         }
 
 
+class AssetComplaint(db.Model):
+    __tablename__ = "asset_complaints"
+
+    id = db.Column(db.Integer, primary_key=True)
+    asset_id = db.Column(db.String(64), nullable=False)
+    issue = db.Column(db.String(512), nullable=False)
+    employee_name = db.Column(db.String(128), nullable=False)
+    employee_username = db.Column(db.String(64))
+    status = db.Column(db.String(32), nullable=False, default="Open")
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "assetId": self.asset_id,
+            "issue": self.issue,
+            "employeeName": self.employee_name,
+            "employeeUsername": self.employee_username,
+            "status": self.status,
+            "createdAt": self.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+
 class License(db.Model):
     __tablename__ = "licenses"
 
@@ -923,6 +946,77 @@ def export_employee_assets():
         mimetype="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+@app.route('/api/complaints', methods=['GET', 'POST'])
+def complaints():
+    """Employee asset complaints (submit) and IT staff review (list)."""
+    global current_role, current_user_name, current_user, is_authenticated
+
+    if request.method == 'GET':
+        if not is_authenticated or current_role not in ["IT Staff", "Admin"]:
+            return jsonify({"error": "Insufficient permissions"}), 403
+        complaints = AssetComplaint.query.order_by(AssetComplaint.created_at.desc()).all()
+        return jsonify([complaint.to_dict() for complaint in complaints])
+
+    if not is_authenticated:
+        return jsonify({"error": "Insufficient permissions"}), 403
+
+    data = request.json or {}
+
+    # Employee submission
+    if current_role == "Employee":
+        asset_id = data.get('assetId')
+        issue = (data.get('issue') or '').strip()
+
+        if not asset_id or not issue:
+            return jsonify({"error": "Asset and issue are required"}), 400
+
+        asset = Asset.query.filter_by(asset_id=asset_id).first()
+        employee_name = current_user_name or ""
+        employee_username = current_user
+        if not asset or (employee_name and asset.assigned_user != employee_name):
+            return jsonify({"error": "Invalid asset selection"}), 400
+
+        complaint = AssetComplaint(
+            asset_id=asset.asset_id,
+            issue=issue,
+            employee_name=asset.assigned_user,
+            employee_username=employee_username,
+            status="Open",
+        )
+        db.session.add(complaint)
+        db.session.commit()
+        add_audit_log("COMPLAINT", f"Complaint submitted for asset {asset_id}", current_role)
+
+        return jsonify(complaint.to_dict()), 201
+
+    # IT Staff/Admin status update
+    if current_role not in ["IT Staff", "Admin"]:
+        return jsonify({"error": "Insufficient permissions"}), 403
+
+    # Prevent IT Staff/Admin from trying to create complaints
+    if data.get('assetId') or data.get('issue'):
+        return jsonify({"error": "Insufficient permissions"}), 403
+
+    complaint_id = data.get('complaintId')
+    new_status = (data.get('status') or '').strip()
+    if not complaint_id or new_status.lower() not in {"open", "in progress", "closed"}:
+        return jsonify({"error": "Invalid complaint status update"}), 400
+
+    complaint = AssetComplaint.query.get(complaint_id)
+    if not complaint:
+        return jsonify({"error": "Complaint not found"}), 404
+
+    normalized = {
+        "open": "Open",
+        "in progress": "In Progress",
+        "closed": "Closed",
+    }[new_status.lower()]
+
+    complaint.status = normalized
+    db.session.commit()
+    add_audit_log("COMPLAINT_UPDATE", f"Complaint {complaint_id} set to {normalized}", current_role)
+    return jsonify(complaint.to_dict())
 
 @app.route('/api/licenses', methods=['GET', 'POST'])
 def licenses():

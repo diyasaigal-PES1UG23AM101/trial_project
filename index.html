@@ -229,6 +229,31 @@
                 </div>
             </section>
 
+            <!-- Employee Complaint Section -->
+            <section id="employeeComplaintSection" class="mb-6 sm:mb-8 hidden">
+                <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">Report Asset Issue</h2>
+                <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
+                    <form id="employeeComplaintForm" class="space-y-4">
+                        <div>
+                            <label for="complaintAssetSelect" class="block text-sm font-medium text-gray-700 mb-1">Select Asset</label>
+                            <select id="complaintAssetSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">No assets available</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="complaintIssue" class="block text-sm font-medium text-gray-700 mb-1">Describe the Issue</label>
+                            <textarea id="complaintIssue" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="Provide as much detail as possible"></textarea>
+                        </div>
+                        <div id="employeeComplaintMessage" class="hidden text-sm font-semibold"></div>
+                        <div class="flex justify-end">
+                            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+                                Submit Complaint
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
             <!-- License Management Section (ITM-F-010) -->
             <section id="licenses" class="mb-6 sm:mb-8">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
@@ -334,6 +359,28 @@
                         </tbody>
                     </table>
                 </div>
+            </section>
+
+            <!-- Complaints Review Section (IT Staff) -->
+            <section id="complaintsSection" class="mb-6 sm:mb-8 hidden">
+                <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">Employee Complaints</h2>
+                <div class="bg-white rounded-lg shadow-md overflow-hidden table-container">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitted</th>
+                                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asset</th>
+                                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Employee</th>
+                                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Issue</th>
+                                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="complaintsTableBody" class="bg-white divide-y divide-gray-200">
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+                <p id="complaintsEmptyState" class="hidden text-sm text-gray-500 mt-2">No complaints submitted yet.</p>
             </section>
 
             <!-- User Management Section (Admin Only) -->
@@ -695,6 +742,7 @@
         let auditLogs = [];
         let auditLogPage = 0;
         const AUDIT_LOG_PAGE_SIZE = 10;
+        let employeeAssets = [];
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -835,6 +883,36 @@
                     if (employeeAlertsContent) {
                         employeeAlertsContent.innerHTML = '<p>No upcoming warranty expirations.</p>';
                     }
+                }
+            }
+
+            const employeeComplaintSection = document.getElementById('employeeComplaintSection');
+            const complaintMessage = document.getElementById('employeeComplaintMessage');
+            if (employeeComplaintSection) {
+                if (isEmployee) {
+                    employeeComplaintSection.classList.remove('hidden');
+                    populateComplaintAssetOptions();
+                    if (complaintMessage) {
+                        complaintMessage.classList.add('hidden');
+                        complaintMessage.textContent = '';
+                        complaintMessage.classList.remove('text-green-600', 'text-red-600');
+                    }
+                } else {
+                    employeeComplaintSection.classList.add('hidden');
+                }
+            }
+
+            const complaintsSection = document.getElementById('complaintsSection');
+            const complaintsTableBody = document.getElementById('complaintsTableBody');
+            const complaintsEmpty = document.getElementById('complaintsEmptyState');
+            if (complaintsSection) {
+                if (roleLower === 'it staff') {
+                    complaintsSection.classList.remove('hidden');
+                    loadComplaints();
+                } else {
+                    complaintsSection.classList.add('hidden');
+                    if (complaintsTableBody) complaintsTableBody.innerHTML = '';
+                    if (complaintsEmpty) complaintsEmpty.classList.add('hidden');
                 }
             }
 
@@ -1032,8 +1110,12 @@
                     updateAssetFilterOptions(assets);
                 }
                 if (roleLower === 'employee') {
+                    employeeAssets = Array.isArray(assets) ? [...assets] : [];
+                    populateComplaintAssetOptions();
                     renderEmployeeAssetAlerts(assets);
                 } else {
+                    employeeAssets = [];
+                    populateComplaintAssetOptions();
                     renderEmployeeAssetAlerts([]);
                 }
                 
@@ -1135,6 +1217,204 @@
                     ${alertItems}
                 </div>
             `;
+        }
+
+        function populateComplaintAssetOptions() {
+            const select = document.getElementById('complaintAssetSelect');
+            if (!select) return;
+
+            const roleLower = (currentRole || '').toLowerCase();
+            if (roleLower !== 'employee') {
+                select.innerHTML = '<option value="">No assets available</option>';
+                select.disabled = true;
+                return;
+            }
+
+            select.disabled = false;
+            const fragment = document.createDocumentFragment();
+            if (!employeeAssets || employeeAssets.length === 0) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No assets available';
+                fragment.appendChild(option);
+                select.innerHTML = '';
+                select.appendChild(fragment);
+                select.disabled = true;
+                return;
+            }
+
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'Select an asset';
+            fragment.appendChild(placeholder);
+
+            employeeAssets.forEach(asset => {
+                const option = document.createElement('option');
+                option.value = asset.assetId;
+                option.textContent = `${asset.assetId} • ${asset.assetType || 'Unknown Type'}`;
+                fragment.appendChild(option);
+            });
+
+            const previousValue = select.value;
+            select.innerHTML = '';
+            select.appendChild(fragment);
+            if (employeeAssets.some(asset => asset.assetId === previousValue)) {
+                select.value = previousValue;
+            } else {
+                select.value = '';
+            }
+        }
+
+        async function submitEmployeeComplaint(event) {
+            event.preventDefault();
+            const roleLower = (currentRole || '').toLowerCase();
+            if (roleLower !== 'employee') return;
+
+            const select = document.getElementById('complaintAssetSelect');
+            const issueInput = document.getElementById('complaintIssue');
+            const messageEl = document.getElementById('employeeComplaintMessage');
+            if (!select || !issueInput || !messageEl) return;
+
+            const assetId = select.value;
+            const issue = issueInput.value.trim();
+
+            const showMessage = (text, type = 'error') => {
+                messageEl.textContent = text;
+                messageEl.classList.remove('hidden', 'text-red-600', 'text-green-600');
+                messageEl.classList.add(type === 'success' ? 'text-green-600' : 'text-red-600');
+            };
+
+            if (!assetId) {
+                showMessage('Please select an asset to report.', 'error');
+                return;
+            }
+            if (!issue) {
+                showMessage('Please describe the issue you are facing.', 'error');
+                return;
+            }
+
+            const submitBtn = event.target.querySelector('button[type="submit"]');
+            if (submitBtn) submitBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE}/complaints`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ assetId, issue }),
+                });
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    throw new Error(data.error || 'Unable to submit complaint.');
+                }
+
+                showMessage('Complaint submitted successfully. Our IT team will review it shortly.', 'success');
+                issueInput.value = '';
+                select.value = '';
+            } catch (error) {
+                console.error('Error submitting complaint:', error);
+                showMessage(error.message || 'Unable to submit complaint right now.', 'error');
+            } finally {
+                if (submitBtn) submitBtn.disabled = false;
+            }
+        }
+
+        async function loadComplaints() {
+            try {
+                const response = await fetch(`${API_BASE}/complaints`);
+                if (!response.ok) {
+                    if (response.status === 403) {
+                        renderComplaints([]);
+                        return;
+                    }
+                    throw new Error(`Request failed with status ${response.status}`);
+                }
+                const complaints = await response.json();
+                renderComplaints(Array.isArray(complaints) ? complaints : []);
+            } catch (error) {
+                console.error('Error loading complaints:', error);
+            }
+        }
+
+        function renderComplaints(complaints) {
+            const tbody = document.getElementById('complaintsTableBody');
+            const emptyState = document.getElementById('complaintsEmptyState');
+            if (!tbody) return;
+
+            tbody.innerHTML = '';
+            if (!Array.isArray(complaints) || complaints.length === 0) {
+                if (emptyState) emptyState.classList.remove('hidden');
+                return;
+            }
+
+            if (emptyState) emptyState.classList.add('hidden');
+
+            complaints.forEach(complaint => {
+                const row = document.createElement('tr');
+                const statusOptions = ['Open', 'In Progress', 'Closed'];
+                const statusSelectHtml = statusOptions.map(option => `
+                    <option value="${option}" ${option === complaint.status ? 'selected' : ''}>${option}</option>
+                `).join('');
+
+                row.innerHTML = `
+                    <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">${complaint.createdAt}</td>
+                    <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900 font-medium">${complaint.assetId}</td>
+                    <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">${complaint.employeeName || '-'}</td>
+                    <td class="px-3 sm:px-6 py-4 text-xs sm:text-sm text-gray-600">${complaint.issue}</td>
+                    <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm">
+                        <div class="flex items-center space-x-2">
+                            <select class="complaint-status-select px-2 py-1 border border-gray-300 rounded text-xs">
+                                ${statusSelectHtml}
+                            </select>
+                            <button class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 complaint-status-btn">
+                                Update
+                            </button>
+                        </div>
+                    </td>
+                `;
+
+                const select = row.querySelector('.complaint-status-select');
+                const button = row.querySelector('.complaint-status-btn');
+                if (select && button) {
+                    button.addEventListener('click', () => updateComplaintStatus(complaint.id, select.value, button, select));
+                }
+
+                tbody.appendChild(row);
+            });
+        }
+
+        async function updateComplaintStatus(complaintId, status, buttonEl, selectEl) {
+            const roleLower = (currentRole || '').toLowerCase();
+            if (roleLower !== 'it staff' && roleLower !== 'admin') return;
+
+            if (buttonEl) {
+                buttonEl.disabled = true;
+                buttonEl.textContent = 'Updating...';
+            }
+            if (selectEl) selectEl.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE}/complaints`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ complaintId, status }),
+                });
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    alert(data.error || 'Unable to update complaint status.');
+                    return;
+                }
+                loadComplaints();
+            } catch (error) {
+                console.error('Error updating complaint:', error);
+                alert('Failed to update complaint status.');
+            } finally {
+                if (buttonEl) {
+                    buttonEl.disabled = false;
+                    buttonEl.textContent = 'Update';
+                }
+                if (selectEl) selectEl.disabled = false;
+            }
         }
 
         async function downloadEmployeeAssetsCsv() {
@@ -2101,6 +2381,9 @@
             loadHardware();
             loadNetwork();
             loadBackup();
+            if (roleLower === 'it staff') {
+                loadComplaints();
+            }
             if ((currentRole || '').toLowerCase() === 'admin') {
                 loadUsers();
                 loadAssetLogs();
@@ -2165,6 +2448,11 @@
             const downloadEmployeeAssetsBtn = document.getElementById('downloadEmployeeAssetsBtn');
             if (downloadEmployeeAssetsBtn) {
                 downloadEmployeeAssetsBtn.addEventListener('click', downloadEmployeeAssetsCsv);
+            }
+
+            const employeeComplaintForm = document.getElementById('employeeComplaintForm');
+            if (employeeComplaintForm) {
+                employeeComplaintForm.addEventListener('submit', submitEmployeeComplaint);
             }
 
             // License modal

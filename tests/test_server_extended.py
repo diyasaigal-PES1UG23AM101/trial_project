@@ -537,6 +537,68 @@ class IIMSExtendedTestCase(unittest.TestCase):
         self.assertGreater(len(assets), 0)
         self.assertTrue(all(asset['assignedUser'] == 'Alice Johnson' for asset in assets))
 
+    def test_employee_can_submit_complaint(self):
+        """Employee can submit a complaint for an owned asset"""
+        self.app.post('/api/auth/login',
+                     json={'username': 'employee', 'password': 'emp123'})
+        assets_response = self.app.get('/api/assets')
+        assets = json.loads(assets_response.data)
+        self.assertGreater(len(assets), 0)
+        asset_id = assets[0]['assetId']
+        complaint_response = self.app.post('/api/complaints',
+                                          json={'assetId': asset_id, 'issue': 'Screen flickering intermittently'})
+        self.assertEqual(complaint_response.status_code, 201)
+        complaint = json.loads(complaint_response.data)
+        self.assertEqual(complaint['assetId'], asset_id)
+        self.assertEqual(complaint['issue'], 'Screen flickering intermittently')
+
+    def test_itstaff_can_view_complaints(self):
+        """IT Staff can list complaints submitted by employees"""
+        # Submit complaint as employee
+        self.app.post('/api/auth/login',
+                     json={'username': 'employee', 'password': 'emp123'})
+        assets = json.loads(self.app.get('/api/assets').data)
+        asset_id = assets[0]['assetId']
+        self.app.post('/api/complaints',
+                     json={'assetId': asset_id, 'issue': 'Battery draining quickly'})
+
+        # Switch to IT staff
+        self.app.post('/api/auth/login',
+                     json={'username': 'itstaff', 'password': 'it123'})
+        response = self.app.get('/api/complaints')
+        self.assertEqual(response.status_code, 200)
+        complaints = json.loads(response.data)
+        self.assertGreater(len(complaints), 0)
+        self.assertTrue(any(c['issue'] == 'Battery draining quickly' for c in complaints))
+
+    def test_itstaff_can_update_complaint_status(self):
+        """IT Staff can update complaint status via API"""
+        # Employee submits complaint
+        self.app.post('/api/auth/login',
+                     json={'username': 'employee', 'password': 'emp123'})
+        assets = json.loads(self.app.get('/api/assets').data)
+        asset_id = assets[0]['assetId']
+        complaint = json.loads(self.app.post('/api/complaints',
+                                            json={'assetId': asset_id, 'issue': 'Keyboard malfunction'}).data)
+        complaint_id = complaint['id']
+
+        # IT staff updates status
+        self.app.post('/api/auth/login',
+                     json={'username': 'itstaff', 'password': 'it123'})
+        update_response = self.app.post('/api/complaints',
+                                       json={'complaintId': complaint_id, 'status': 'Closed'})
+        self.assertEqual(update_response.status_code, 200)
+        updated = json.loads(update_response.data)
+        self.assertEqual(updated['status'], 'Closed')
+
+    def test_non_employee_cannot_submit_complaint(self):
+        """Non-employee users cannot submit complaints"""
+        self.app.post('/api/auth/login',
+                     json={'username': 'itstaff', 'password': 'it123'})
+        response = self.app.post('/api/complaints',
+                                json={'assetId': 'AST-001', 'issue': 'Invalid request'})
+        self.assertEqual(response.status_code, 403)
+
     def test_employee_can_download_assets_csv(self):
         """Employee can download their assets as CSV"""
         self.app.post('/api/auth/login',
