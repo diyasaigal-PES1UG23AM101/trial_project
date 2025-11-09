@@ -42,6 +42,15 @@ class IIMSTestCase(unittest.TestCase):
         self.assertIn('hardwareHealthAlerts', data)
         self.assertIn('backupFailures', data)
         self.assertIn('networkEvents', data)
+        self.assertIn('licenseAlertDetails', data)
+        self.assertIsInstance(data['licenseAlertDetails'], list)
+        self.assertTrue(
+            any(alert.get('licenseId') == 'LIC-006' for alert in data['licenseAlertDetails']),
+            "Expected seeded license LIC-006 to appear in license alert details"
+        )
+        for alert in data['licenseAlertDetails']:
+            self.assertIn('daysUntilExpiry', alert)
+            self.assertLessEqual(alert['daysUntilExpiry'], 7)
     
     def test_get_assets(self):
         """Test getting all assets"""

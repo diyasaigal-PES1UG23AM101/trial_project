@@ -276,6 +276,7 @@ def calculate_dashboard_metrics():
     
     today = date.today()
     expiry_threshold = today + timedelta(days=90)
+    license_alert_threshold = today + timedelta(days=7)
     licenses_expiring_soon = (
         License.query.filter(License.expiry_date <= expiry_threshold).count()
     )
@@ -304,6 +305,20 @@ def calculate_dashboard_metrics():
         ).order_by(NetworkDevice.device_id.asc()).limit(20)
     ]
 
+    license_alert_details = []
+    for license_obj in (
+        License.query.filter(
+            License.expiry_date <= license_alert_threshold,
+            License.expiry_date >= today,
+        )
+        .order_by(License.expiry_date.asc())
+        .limit(20)
+        .all()
+    ):
+        license_dict = license_obj.to_dict()
+        license_dict["daysUntilExpiry"] = (license_obj.expiry_date - today).days
+        license_alert_details.append(license_dict)
+
     return {
         "totalAssets": total_assets,
         "licensesExpiringSoon": licenses_expiring_soon,
@@ -312,6 +327,7 @@ def calculate_dashboard_metrics():
         "backupFailures": backup_failures,
         "networkEvents": network_events,
         "networkAlertDetails": network_alert_details,
+        "licenseAlertDetails": license_alert_details,
     }
 
 
@@ -560,6 +576,15 @@ def seed_initial_data():
                 total_seats=15,
                 used_seats=12,
                 expiry_date=date(2025, 6, 30),
+                compliance_status="Compliant",
+            ),
+            License(
+                license_id="LIC-006",
+                software_name="Slack Enterprise",
+                license_key="XXXXX-XXXXX-XXXXX-006",
+                total_seats=100,
+                used_seats=82,
+                expiry_date=(datetime.utcnow() + timedelta(days=5)).date(),
                 compliance_status="Compliant",
             ),
         ]
