@@ -828,9 +828,9 @@ def backup_recovery():
 
 @app.route('/api/monitoring/backup/comment', methods=['POST'])
 def backup_comment():
-    """Allow Admin/IT Staff to add or update backup technician comments."""
+    """Allow IT Staff to add or update backup technician comments."""
     global current_role, is_authenticated
-    if not is_authenticated or current_role not in ["Admin", "IT Staff"]:
+    if not is_authenticated or current_role != "IT Staff":
         return jsonify({"error": "Insufficient permissions"}), 403
 
     payload = request.json or {}

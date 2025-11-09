@@ -995,7 +995,8 @@
                 const backups = await response.json();
                 const tbody = document.getElementById('backupTableBody');
                 tbody.innerHTML = '';
-                const canComment = currentRole === 'Admin' || currentRole === 'IT Staff';
+                const role = (currentRole || '').toLowerCase();
+                const canComment = role === 'it staff';
 
                 backups.forEach(job => {
                     const row = document.createElement('tr');
@@ -1236,7 +1237,7 @@
         }
 
         async function saveBackupComment(jobId) {
-            if (currentRole !== 'Admin' && currentRole !== 'IT Staff') return;
+            if ((currentRole || '').toLowerCase() !== 'it staff') return;
             const textarea = document.getElementById(`backup-comment-${jobId}`);
             if (!textarea) return;
             const comment = textarea.value;

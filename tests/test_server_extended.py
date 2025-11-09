@@ -398,6 +398,14 @@ class IIMSExtendedTestCase(unittest.TestCase):
         data = json.loads(response.data)
         self.assertEqual(data['technicianComment'], 'Re-run scheduled')
 
+    def test_admin_cannot_comment_on_backup(self):
+        """Admin role should be read-only for backup comments"""
+        self.app.post('/api/auth/login',
+                     json={'username': 'admin', 'password': 'admin123', 'mfaCode': '123456'})
+        response = self.app.post('/api/monitoring/backup/comment',
+                                json={'jobId': 'BK-001', 'comment': 'Should not be saved'})
+        self.assertEqual(response.status_code, 403)
+
     def test_employee_cannot_comment_on_backup(self):
         """Employees are denied backup comment updates"""
         self.app.post('/api/auth/login',
