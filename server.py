@@ -103,6 +103,7 @@ class BackupJob(db.Model):
     last_run_date = db.Column(db.DateTime, nullable=False)
     status = db.Column(db.String(32), nullable=False)
     alert_reason = db.Column(db.String(256))
+    technician_comment = db.Column(db.String(512))
 
     def to_dict(self):
         return {
@@ -111,6 +112,7 @@ class BackupJob(db.Model):
             "lastRunDate": self.last_run_date.strftime("%Y-%m-%d %H:%M:%S"),
             "status": self.status,
             "alertReason": self.alert_reason,
+            "technicianComment": self.technician_comment,
         }
 
 
@@ -351,6 +353,15 @@ def generate_report_snapshot():
         "generatedAt": now.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
+def ensure_backup_comment_column():
+    """Ensure technician_comment column exists on backup_jobs table."""
+    inspector = db.inspect(db.engine)
+    columns = [col["name"] for col in inspector.get_columns("backup_jobs")]
+    if "technician_comment" not in columns:
+        with db.engine.connect() as connection:
+            connection.execute(db.text("ALTER TABLE backup_jobs ADD COLUMN technician_comment VARCHAR(512)"))
+            connection.commit()
+
 
 def seed_initial_data():
     """Populate the database with initial records if empty."""
@@ -534,6 +545,7 @@ def seed_initial_data():
                 last_run_date=now - timedelta(days=1),
                 status="Success",
                 alert_reason=None,
+                technician_comment=None,
             ),
             BackupJob(
                 job_id="BK-002",
@@ -541,6 +553,7 @@ def seed_initial_data():
                 last_run_date=now - timedelta(days=2),
                 status="Failure",
                 alert_reason="Disk space insufficient",
+                technician_comment=None,
             ),
             BackupJob(
                 job_id="BK-003",
@@ -548,6 +561,7 @@ def seed_initial_data():
                 last_run_date=now - timedelta(days=3),
                 status="Success",
                 alert_reason=None,
+                technician_comment=None,
             ),
             BackupJob(
                 job_id="BK-004",
@@ -555,6 +569,7 @@ def seed_initial_data():
                 last_run_date=now - timedelta(days=5),
                 status="Missed",
                 alert_reason="Scheduled time conflict",
+                technician_comment=None,
             ),
             BackupJob(
                 job_id="BK-005",
@@ -562,6 +577,7 @@ def seed_initial_data():
                 last_run_date=now - timedelta(hours=12),
                 status="Success",
                 alert_reason=None,
+                technician_comment=None,
             ),
             BackupJob(
                 job_id="BK-006",
@@ -569,6 +585,7 @@ def seed_initial_data():
                 last_run_date=now - timedelta(days=4),
                 status="Failure",
                 alert_reason="Network timeout",
+                technician_comment=None,
             ),
         ]
         db.session.add_all(backup_jobs)
@@ -617,6 +634,7 @@ def initialize_database(reset=False):
         if reset:
             db.drop_all()
         db.create_all()
+        ensure_backup_comment_column()
         seed_initial_data()
 
 
@@ -808,6 +826,29 @@ def backup_recovery():
     jobs = BackupJob.query.all()
     return jsonify([job.to_dict() for job in jobs])
 
+@app.route('/api/monitoring/backup/comment', methods=['POST'])
+def backup_comment():
+    """Allow Admin/IT Staff to add or update backup technician comments."""
+    global current_role, is_authenticated
+    if not is_authenticated or current_role not in ["Admin", "IT Staff"]:
+        return jsonify({"error": "Insufficient permissions"}), 403
+
+    payload = request.json or {}
+    job_id = payload.get("jobId")
+    comment = payload.get("comment", "")
+
+    if not job_id:
+        return jsonify({"error": "jobId is required"}), 400
+
+    job = BackupJob.query.filter_by(job_id=job_id).first()
+    if not job:
+        return jsonify({"error": "Backup job not found"}), 404
+
+    job.technician_comment = comment.strip() or None
+    db.session.commit()
+    add_audit_log("BACKUP_COMMENT", f"Updated backup comment for {job_id}", current_role)
+    return jsonify(job.to_dict())
+
 @app.route('/api/users', methods=['GET', 'POST'])
 def manage_users():
     """Admin-only user management endpoint."""
@@ -956,7 +997,7 @@ def reports_overview():
 def audit_log():
     """Get audit log (Admin/IT Staff only)"""
     global current_role
-    if current_role not in ["Admin", "IT Staff"]:
+    if current_role != "Admin":
         return jsonify({"error": "Insufficient permissions"}), 403
     logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).all()
     return jsonify([log.to_dict() for log in logs])

@@ -272,9 +272,6 @@
             <section id="backup" class="mb-6 sm:mb-8">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
                     <h2 class="text-xl sm:text-2xl font-semibold text-gray-800">Backup & Recovery Monitoring</h2>
-                    <button id="verifyBackupBtn" class="px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm sm:text-base">
-                        Run Verification
-                    </button>
                 </div>
                 <div class="bg-white rounded-lg shadow-md overflow-hidden table-container">
                     <table class="min-w-full divide-y divide-gray-200">
@@ -284,7 +281,8 @@
                                 <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asset ID</th>
                                 <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Run Date</th>
                                 <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Alert Reason</th>
+                            <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Alert Reason</th>
+                            <th class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Technician Comment</th>
                             </tr>
                         </thead>
                         <tbody id="backupTableBody" class="bg-white divide-y divide-gray-200">
@@ -628,8 +626,7 @@
             const canCRUD = currentRole === 'Admin' || currentRole === 'IT Staff';
             document.getElementById('addAssetBtn').style.display = canCRUD ? 'block' : 'none';
             document.getElementById('addLicenseBtn').style.display = canCRUD ? 'block' : 'none';
-            document.getElementById('auditLog').style.display = canCRUD ? 'block' : 'none';
-            document.getElementById('verifyBackupBtn').style.display = canCRUD ? 'block' : 'none';
+            document.getElementById('auditLog').style.display = currentRole === 'Admin' ? 'block' : 'none';
             document.getElementById('integrationStatusCard').style.display = canCRUD ? 'block' : 'none';
             const userSection = document.getElementById('userManagement');
             if (userSection) {
@@ -998,7 +995,8 @@
                 const backups = await response.json();
                 const tbody = document.getElementById('backupTableBody');
                 tbody.innerHTML = '';
-                
+                const canComment = currentRole === 'Admin' || currentRole === 'IT Staff';
+
                 backups.forEach(job => {
                     const row = document.createElement('tr');
                     let statusBadge;
@@ -1011,66 +1009,28 @@
                     } else {
                         statusBadge = '<span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-semibold">Missed</span>';
                     }
-                    
+
+                    const commentCell = canComment
+                        ? `
+                            <div class="space-y-2 max-w-[220px]">
+                                <textarea id="backup-comment-${job.jobId}" class="w-full min-h-[50px] px-2 py-1 border border-gray-300 rounded text-xs resize-y" placeholder="Add comment">${job.technicianComment ? job.technicianComment : ''}</textarea>
+                                <button class="w-full px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700" onclick="saveBackupComment('${job.jobId}')">Save</button>
+                            </div>
+                          `
+                        : `<span class="text-xs text-gray-600 block max-w-[220px]">${job.technicianComment ? job.technicianComment : '-'}</span>`;
+
                     row.innerHTML = `
                         <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium text-gray-900">${job.jobId}</td>
                         <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">${job.assetId}</td>
                         <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500">${job.lastRunDate}</td>
                         <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm">${statusBadge}</td>
                         <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm ${job.alertReason ? 'text-red-600' : 'text-gray-500'}">${job.alertReason || '-'}</td>
+                        <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm">${commentCell}</td>
                     `;
                     tbody.appendChild(row);
                 });
             } catch (error) {
                 console.error('Error loading backup:', error);
-            }
-        }
-
-        async function verifyBackup() {
-            try {
-                const response = await fetch(`${API_BASE}/monitoring/backup/verify`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                const data = await response.json();
-                
-                const content = document.getElementById('backupVerifyContent');
-                content.innerHTML = `
-                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                        <p class="text-sm text-blue-800"><strong>Verification Complete</strong></p>
-                        <p class="text-xs text-blue-700 mt-1">Found ${data.verifiedJobs} job(s) requiring attention</p>
-                        <p class="text-xs text-blue-600 mt-1">Timestamp: ${data.timestamp}</p>
-                    </div>
-                `;
-                
-                data.results.forEach(result => {
-                    const card = document.createElement('div');
-                    card.className = 'bg-gray-50 border border-gray-200 rounded-lg p-4';
-                    card.innerHTML = `
-                        <div class="flex justify-between items-start mb-2">
-                            <div>
-                                <p class="font-semibold text-sm text-gray-800">${result.jobId}</p>
-                                <p class="text-xs text-gray-600">Asset: ${result.assetId}</p>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-xs text-gray-500">Previous: ${result.previousStatus}</p>
-                                <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold">${result.newStatus}</span>
-                            </div>
-                        </div>
-                        <p class="text-xs text-gray-700 mt-2"><strong>Issue:</strong> ${result.alertReason}</p>
-                        <p class="text-xs text-gray-700 mt-1"><strong>Action:</strong> ${result.recommendedAction}</p>
-                    `;
-                    content.appendChild(card);
-                });
-                
-                // Reload backup table to show updated statuses
-                loadBackup();
-                
-                document.getElementById('backupVerifyModal').classList.remove('hidden');
-                loadAuditLog();
-            } catch (error) {
-                console.error('Error verifying backup:', error);
-                alert('Error verifying backups. Make sure you have Admin/IT Staff permissions.');
             }
         }
 
@@ -1272,6 +1232,30 @@
             } catch (error) {
                 console.error('Error downloading report CSV:', error);
                 alert('Unexpected error downloading report.');
+            }
+        }
+
+        async function saveBackupComment(jobId) {
+            if (currentRole !== 'Admin' && currentRole !== 'IT Staff') return;
+            const textarea = document.getElementById(`backup-comment-${jobId}`);
+            if (!textarea) return;
+            const comment = textarea.value;
+            try {
+                const response = await fetch(`${API_BASE}/monitoring/backup/comment`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jobId, comment })
+                });
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    alert(data.error || 'Unable to save comment.');
+                    return;
+                }
+                loadBackup();
+                loadAuditLog();
+            } catch (error) {
+                console.error('Error saving backup comment:', error);
+                alert('Unexpected error saving comment.');
             }
         }
 
@@ -1523,12 +1507,6 @@
                 document.getElementById('qrModal').classList.add('hidden');
             });
 
-            // Backup Verify Modal
-            document.getElementById('verifyBackupBtn').addEventListener('click', verifyBackup);
-            document.getElementById('closeBackupVerifyModal').addEventListener('click', () => {
-                document.getElementById('backupVerifyModal').classList.add('hidden');
-            });
-
             const closeUserAssetsBtn = document.getElementById('closeUserAssetsModal');
             if (closeUserAssetsBtn) {
                 closeUserAssetsBtn.addEventListener('click', () => {
@@ -1606,6 +1584,7 @@
         window.editLicense = editLicense;
         window.deleteLicense = deleteLicense;
         window.generateQR = generateQR;
+        window.saveBackupComment = saveBackupComment;
     </script>
 </body>
 </html>

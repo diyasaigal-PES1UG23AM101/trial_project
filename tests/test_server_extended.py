@@ -218,15 +218,22 @@ class IIMSExtendedTestCase(unittest.TestCase):
             self.assertEqual(asset['assignedUser'], 'Alice Johnson')
     
     def test_audit_log_access(self):
-        """Test audit log access for Admin/IT Staff"""
-        # Login as IT Staff
+        """Admin should be able to access audit log"""
+        # Login as Admin
         self.app.post('/api/auth/login',
-                     json={'username': 'itstaff', 'password': 'it123'})
+                     json={'username': 'admin', 'password': 'admin123', 'mfaCode': '123456'})
         # Access audit log
         response = self.app.get('/api/audit-log')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.data)
         self.assertIsInstance(data, list)
+
+    def test_audit_log_itstaff_denied(self):
+        """IT Staff should not see audit log"""
+        self.app.post('/api/auth/login',
+                     json={'username': 'itstaff', 'password': 'it123'})
+        response = self.app.get('/api/audit-log')
+        self.assertEqual(response.status_code, 403)
     
     def test_audit_log_employee_denied(self):
         """Test that Employee cannot access audit log"""
@@ -380,6 +387,24 @@ class IIMSExtendedTestCase(unittest.TestCase):
         self.assertIn('Assets Report', content)
         self.assertIn('Software License Report', content)
         self.assertIn('Hardware & Network Monitoring Report', content)
+
+    def test_itstaff_can_comment_on_backup(self):
+        """IT Staff can add technician comments to backup jobs"""
+        self.app.post('/api/auth/login',
+                     json={'username': 'itstaff', 'password': 'it123'})
+        response = self.app.post('/api/monitoring/backup/comment',
+                                json={'jobId': 'BK-001', 'comment': 'Re-run scheduled'})
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertEqual(data['technicianComment'], 'Re-run scheduled')
+
+    def test_employee_cannot_comment_on_backup(self):
+        """Employees are denied backup comment updates"""
+        self.app.post('/api/auth/login',
+                     json={'username': 'employee', 'password': 'emp123'})
+        response = self.app.post('/api/monitoring/backup/comment',
+                                json={'jobId': 'BK-001', 'comment': 'Should fail'})
+        self.assertEqual(response.status_code, 403)
 
 if __name__ == '__main__':
     unittest.main()
