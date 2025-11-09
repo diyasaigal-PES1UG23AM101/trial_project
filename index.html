@@ -1481,6 +1481,7 @@
                     return;
                 }
                 loadHardware();
+                loadDashboard();
                 loadAuditLog();
             } catch (error) {
                 console.error('Error deleting hardware record:', error);
@@ -1501,6 +1502,7 @@
                     return;
                 }
                 loadNetwork();
+                loadDashboard();
                 loadAuditLog();
             } catch (error) {
                 console.error('Error deleting network record:', error);
@@ -1884,6 +1886,7 @@
                         hardwareForm.reset();
                         document.getElementById('hardwareModal').classList.add('hidden');
                         loadHardware();
+                    loadDashboard();
                         loadAuditLog();
                     } catch (error) {
                         console.error('Error adding hardware record:', error);
@@ -1925,6 +1928,7 @@
                         networkForm.reset();
                         document.getElementById('networkModal').classList.add('hidden');
                         loadNetwork();
+                    loadDashboard();
                         loadAuditLog();
                     } catch (error) {
                         console.error('Error adding network record:', error);
