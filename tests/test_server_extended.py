@@ -340,6 +340,47 @@ class IIMSExtendedTestCase(unittest.TestCase):
         response = self.app.get('/api/users/employee/assets')
         self.assertEqual(response.status_code, 403)
 
+    def test_admin_can_generate_reports(self):
+        """Admin should receive full report payload"""
+        self.app.post('/api/auth/login',
+                     json={'username': 'admin', 'password': 'admin123', 'mfaCode': '123456'})
+        response = self.app.get('/api/reports/overview')
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        for key in [
+            'assetsReport',
+            'softwareLicenseReport',
+            'hardwareNetworkReport',
+            'backupRecoveryReport',
+            'departmentAssetReport',
+            'generatedAt'
+        ]:
+            self.assertIn(key, data)
+        self.assertIn('totalAssets', data['assetsReport'])
+        self.assertIn('totalLicensedSoftware', data['softwareLicenseReport'])
+        self.assertIn('averageCpuLoad', data['hardwareNetworkReport'])
+        self.assertIn('backupsRunThisWeek', data['backupRecoveryReport'])
+        self.assertIn('assetsPerDepartment', data['departmentAssetReport'])
+
+    def test_non_admin_cannot_generate_reports(self):
+        """Only Admin role can access reports endpoint"""
+        self.app.post('/api/auth/login',
+                     json={'username': 'itstaff', 'password': 'it123'})
+        response = self.app.get('/api/reports/overview')
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_download_report_csv(self):
+        """Reports endpoint should support CSV output"""
+        self.app.post('/api/auth/login',
+                     json={'username': 'admin', 'password': 'admin123', 'mfaCode': '123456'})
+        response = self.app.get('/api/reports/overview?format=csv')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('text/csv', response.headers.get('Content-Type', ''))
+        content = response.data.decode('utf-8')
+        self.assertIn('Assets Report', content)
+        self.assertIn('Software License Report', content)
+        self.assertIn('Hardware & Network Monitoring Report', content)
+
 if __name__ == '__main__':
     unittest.main()
 

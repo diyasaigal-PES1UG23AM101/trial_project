@@ -1,11 +1,13 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from sqlalchemy.pool import StaticPool
 from datetime import datetime, timedelta, date
 import uuid
 import os
+import csv
+import io
 
 app = Flask(__name__)
 CORS(app)
@@ -245,6 +247,108 @@ def calculate_dashboard_metrics():
         "hardwareHealthAlerts": hardware_alerts,
         "backupFailures": backup_failures,
         "networkEvents": network_events,
+    }
+
+
+def generate_report_snapshot():
+    """Aggregate comprehensive operational metrics for reporting."""
+    today = date.today()
+    now = datetime.utcnow()
+    warranty_threshold = today + timedelta(days=30)
+    license_threshold = today + timedelta(days=30)
+    start_of_week_date = today - timedelta(days=today.weekday())
+    start_of_week = datetime.combine(start_of_week_date, datetime.min.time())
+    start_of_today = datetime.combine(today, datetime.min.time())
+    stale_backup_threshold = now - timedelta(days=7)
+
+    # Assets
+    total_assets = Asset.query.count()
+    assets_per_department = {
+        (dept or "Unknown"): count
+        for dept, count in db.session.query(Asset.department, func.count())
+        .group_by(Asset.department)
+        .all()
+    }
+    assets_under_maintenance = Asset.query.filter(Asset.status == "Maintenance").count()
+    assets_expiring_soon = Asset.query.filter(
+        Asset.warranty_expiry_date <= warranty_threshold
+    ).count()
+
+    # Licenses
+    total_licenses = License.query.count()
+    active_licenses = License.query.filter(License.compliance_status != "Unauthorized").count()
+    licenses_expiring_soon = License.query.filter(
+        License.expiry_date <= license_threshold
+    ).count()
+    expired_licenses = License.query.filter(License.expiry_date < today).count()
+
+    # Hardware & Network
+    hardware_records = HardwareHealthRecord.query.all()
+    hardware_count = len(hardware_records)
+    avg_cpu = round(sum(h.cpu_load for h in hardware_records) / hardware_count, 2) if hardware_count else 0
+    avg_memory = round(sum(h.memory_util for h in hardware_records) / hardware_count, 2) if hardware_count else 0
+    # Disk usage data not tracked; reuse memory metrics as an approximation for visual parity
+    avg_disk = avg_memory
+
+    alerts_today = HardwareHealthRecord.query.filter(
+        HardwareHealthRecord.last_check >= start_of_today,
+        or_(HardwareHealthRecord.cpu_load > 85, HardwareHealthRecord.is_overheating.is_(True))
+    ).count()
+    alerts_this_week = HardwareHealthRecord.query.filter(
+        HardwareHealthRecord.last_check >= start_of_week,
+        or_(HardwareHealthRecord.cpu_load > 85, HardwareHealthRecord.is_overheating.is_(True))
+    ).count()
+
+    top_network_devices = [
+        {"deviceId": dev.device_id, "bandwidthMB": dev.bandwidth_mb}
+        for dev in NetworkDevice.query.order_by(NetworkDevice.bandwidth_mb.desc()).limit(5)
+    ]
+
+    # Backup & Recovery
+    backups_this_week = BackupJob.query.filter(BackupJob.last_run_date >= start_of_week).count()
+    backup_success = BackupJob.query.filter(BackupJob.status == "Success").count()
+    backup_failure = BackupJob.query.filter(BackupJob.status == "Failure").count()
+    backup_missed = BackupJob.query.filter(BackupJob.status == "Missed").count()
+    stale_backups = {
+        job.asset_id
+        for job in BackupJob.query.filter(BackupJob.last_run_date < stale_backup_threshold).all()
+    }
+
+    # Departmental asset usage (duplicate of assets_per_department but surfaced separately)
+    department_usage = assets_per_department.copy()
+
+    return {
+        "assetsReport": {
+            "totalAssets": total_assets,
+            "assetsPerDepartment": assets_per_department,
+            "assetsUnderMaintenance": assets_under_maintenance,
+            "assetsExpiringWarrantySoon": assets_expiring_soon,
+        },
+        "softwareLicenseReport": {
+            "totalLicensedSoftware": total_licenses,
+            "activeLicenses": active_licenses,
+            "licensesExpiringIn30Days": licenses_expiring_soon,
+            "expiredLicenses": expired_licenses,
+        },
+        "hardwareNetworkReport": {
+            "averageCpuLoad": avg_cpu,
+            "averageMemoryUtilization": avg_memory,
+            "averageDiskUtilization": avg_disk,
+            "alertsToday": alerts_today,
+            "alertsThisWeek": alerts_this_week,
+            "topBandwidthDevices": top_network_devices,
+        },
+        "backupRecoveryReport": {
+            "backupsRunThisWeek": backups_this_week,
+            "successfulBackups": backup_success,
+            "failedBackups": backup_failure,
+            "missedBackups": backup_missed,
+            "systemsWithoutRecentBackup": sorted(stale_backups),
+        },
+        "departmentAssetReport": {
+            "assetsPerDepartment": department_usage,
+        },
+        "generatedAt": now.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
 
@@ -765,6 +869,88 @@ def user_assets(username):
         )
 
     return jsonify([asset.to_dict() for asset in assets])
+
+@app.route('/api/reports/overview', methods=['GET'])
+def reports_overview():
+    """Admin-only consolidated reporting endpoint."""
+    global current_role, is_authenticated
+    if not is_authenticated or current_role != "Admin":
+        return jsonify({"error": "Insufficient permissions"}), 403
+    report = generate_report_snapshot()
+    add_audit_log("REPORT_GENERATE", "Generated consolidated operational report", current_role)
+
+    response_format = request.args.get("format", "json").strip().lower()
+    if response_format == "csv":
+        csv_buffer = io.StringIO()
+        writer = csv.writer(csv_buffer)
+
+        writer.writerow(["Report Generated At", report["generatedAt"]])
+        writer.writerow([])
+
+        writer.writerow(["Assets Report"])
+        writer.writerow(["Metric", "Value"])
+        assets_section = report["assetsReport"]
+        writer.writerow(["Total Assets", assets_section["totalAssets"]])
+        writer.writerow(["Assets Under Maintenance", assets_section["assetsUnderMaintenance"]])
+        writer.writerow(["Assets Expiring Warranty Within 30 Days", assets_section["assetsExpiringWarrantySoon"]])
+        writer.writerow(["Assets Per Department"])
+        for dept, count in assets_section["assetsPerDepartment"].items():
+            writer.writerow([f"  {dept}", count])
+        writer.writerow([])
+
+        writer.writerow(["Software License Report"])
+        licenses_section = report["softwareLicenseReport"]
+        writer.writerow(["Metric", "Value"])
+        writer.writerow(["Total Licensed Software", licenses_section["totalLicensedSoftware"]])
+        writer.writerow(["Active Licenses", licenses_section["activeLicenses"]])
+        writer.writerow(["Licenses Expiring Within 30 Days", licenses_section["licensesExpiringIn30Days"]])
+        writer.writerow(["Expired Licenses", licenses_section["expiredLicenses"]])
+        writer.writerow([])
+
+        writer.writerow(["Hardware & Network Monitoring Report"])
+        hardware_section = report["hardwareNetworkReport"]
+        writer.writerow(["Metric", "Value"])
+        writer.writerow(["Average CPU Load (%)", hardware_section["averageCpuLoad"]])
+        writer.writerow(["Average RAM Utilization (%)", hardware_section["averageMemoryUtilization"]])
+        writer.writerow(["Average Disk Utilization (%)", hardware_section["averageDiskUtilization"]])
+        writer.writerow(["Alerts Triggered Today", hardware_section["alertsToday"]])
+        writer.writerow(["Alerts Triggered This Week", hardware_section["alertsThisWeek"]])
+        writer.writerow(["Top Devices by Bandwidth"])
+        for device in hardware_section["topBandwidthDevices"]:
+            writer.writerow([f"  {device['deviceId']}", f"{device['bandwidthMB']} MB"])
+        writer.writerow([])
+
+        writer.writerow(["Backup & Recovery Report"])
+        backup_section = report["backupRecoveryReport"]
+        writer.writerow(["Metric", "Value"])
+        writer.writerow(["Backups Run This Week", backup_section["backupsRunThisWeek"]])
+        writer.writerow(["Successful Backups", backup_section["successfulBackups"]])
+        writer.writerow(["Failed Backups", backup_section["failedBackups"]])
+        writer.writerow(["Missed Backups", backup_section["missedBackups"]])
+        writer.writerow(["Systems Without Recent Backup (>7 days)"])
+        if backup_section["systemsWithoutRecentBackup"]:
+            for system in backup_section["systemsWithoutRecentBackup"]:
+                writer.writerow([f"  {system}"])
+        else:
+            writer.writerow(["  None"])
+        writer.writerow([])
+
+        writer.writerow(["Department Asset Report"])
+        dept_section = report["departmentAssetReport"]["assetsPerDepartment"]
+        writer.writerow(["Department", "Asset Count"])
+        for dept, count in dept_section.items():
+            writer.writerow([dept, count])
+
+        csv_buffer.seek(0)
+        return Response(
+            csv_buffer.getvalue(),
+            mimetype="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=operational-report.csv"
+            }
+        )
+
+    return jsonify(report)
 
 @app.route('/api/audit-log', methods=['GET'])
 def audit_log():

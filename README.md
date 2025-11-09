@@ -10,6 +10,7 @@ A comprehensive full-stack application prototype for managing IT infrastructure 
 - **Role-Based Access Control**: Admin, IT Staff, and Employee roles
 - **User Provisioning**: Admins can create new users and assign IT Staff or Employee roles
 - **Employee Asset Visibility**: Admins can inspect assets assigned to any employee
+- **Comprehensive Reporting**: One-click operational reports covering assets, licenses, monitoring, backups, and department usage
 - **Authentication**: Login with MFA support for Admin users
 - **Analytics**: Asset distribution by department
 - **Integration Status**: External service monitoring
@@ -50,6 +51,11 @@ A comprehensive full-stack application prototype for managing IT infrastructure 
 
 4. **Access the application:**
    Open `http://localhost:5000` in your browser
+
+5. **Generate administrative reports (Admin role only):**
+   - Login as `admin` / `admin123` (MFA `123456`)
+   - Use the “Generate Reports” button on the dashboard to view real-time summaries across assets, licensing, monitoring, backups, and departmental usage
+   - Download the same summary as a CSV file with the adjacent “Download CSV” action for offline analysis
 
 ### Docker Deployment
 

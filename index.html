@@ -157,9 +157,14 @@
                 </div>
 
                 <div class="bg-white p-4 sm:p-6 rounded-lg shadow-md">
-                    <button id="generateReportBtn" disabled class="px-4 sm:px-6 py-2 bg-gray-400 text-white rounded-lg cursor-not-allowed text-sm sm:text-base">
-                        Generate PDF Report (ITM-F-061)
-                    </button>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <button id="generateReportBtn" class="px-4 sm:px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm sm:text-base hover:bg-indigo-700 hidden">
+                            View Reports (ITM-F-061)
+                        </button>
+                        <button id="downloadReportCsvBtn" class="px-4 sm:px-6 py-2 bg-green-600 text-white rounded-lg text-sm sm:text-base hover:bg-green-700 hidden">
+                            Download CSV
+                        </button>
+                    </div>
                 </div>
             </section>
 
@@ -386,6 +391,22 @@
             </div>
             <div id="userAssetsContent">
                 <p class="text-sm text-gray-500">Loading assets...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reports Modal -->
+    <div id="reportsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg p-4 sm:p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div class="flex items-start justify-between mb-4">
+                <div>
+                    <h3 class="text-2xl font-semibold text-gray-800">Operational Reports</h3>
+                    <p id="reportGeneratedAt" class="text-sm text-gray-500"></p>
+                </div>
+                <button id="closeReportsModal" class="text-gray-500 hover:text-gray-700 text-xl">&times;</button>
+            </div>
+            <div id="reportsContent" class="space-y-6">
+                <p class="text-sm text-gray-500">Preparing report...</p>
             </div>
         </div>
     </div>
@@ -618,6 +639,26 @@
                 } else {
                     userSection.classList.add('hidden');
                     resetUserManagementUI();
+                }
+            }
+            const reportBtn = document.getElementById('generateReportBtn');
+            if (reportBtn) {
+                if (currentRole === 'Admin') {
+                    reportBtn.classList.remove('hidden');
+                    reportBtn.disabled = false;
+                } else {
+                    reportBtn.classList.add('hidden');
+                    reportBtn.disabled = true;
+                }
+            }
+            const reportCsvBtn = document.getElementById('downloadReportCsvBtn');
+            if (reportCsvBtn) {
+                if (currentRole === 'Admin') {
+                    reportCsvBtn.classList.remove('hidden');
+                    reportCsvBtn.disabled = false;
+                } else {
+                    reportCsvBtn.classList.add('hidden');
+                    reportCsvBtn.disabled = true;
                 }
             }
         }
@@ -1181,6 +1222,175 @@
             }
         }
 
+        async function generateReports() {
+            if (currentRole !== 'Admin') return;
+            const modal = document.getElementById('reportsModal');
+            const content = document.getElementById('reportsContent');
+            const generatedAtEl = document.getElementById('reportGeneratedAt');
+
+            if (!modal || !content) return;
+
+            content.innerHTML = '<p class="text-sm text-gray-500">Compiling reports...</p>';
+            if (generatedAtEl) generatedAtEl.textContent = '';
+            modal.classList.remove('hidden');
+
+            try {
+                const response = await fetch(`${API_BASE}/reports/overview`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    content.innerHTML = `<p class="text-sm text-red-600">${data.error || 'Unable to generate reports.'}</p>`;
+                    return;
+                }
+
+                populateReportsModal(data);
+            } catch (error) {
+                console.error('Error generating reports:', error);
+                content.innerHTML = '<p class="text-sm text-red-600">Unexpected error generating reports.</p>';
+            }
+        }
+
+        async function downloadReportsCsv() {
+            if (currentRole !== 'Admin') return;
+            try {
+                const response = await fetch(`${API_BASE}/reports/overview?format=csv`);
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    alert(data.error || 'Unable to download report.');
+                    return;
+                }
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                const today = new Date().toISOString().split('T')[0];
+                link.href = url;
+                link.download = `operational-report-${today}.csv`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error('Error downloading report CSV:', error);
+                alert('Unexpected error downloading report.');
+            }
+        }
+
+        function populateReportsModal(reportData) {
+            const content = document.getElementById('reportsContent');
+            const generatedAtEl = document.getElementById('reportGeneratedAt');
+            if (!content) return;
+
+            const {
+                assetsReport,
+                softwareLicenseReport,
+                hardwareNetworkReport,
+                backupRecoveryReport,
+                departmentAssetReport,
+                generatedAt
+            } = reportData;
+
+            if (generatedAtEl) {
+                generatedAtEl.textContent = `Generated at: ${generatedAt}`;
+            }
+
+            const formatObjectList = (obj) => {
+                if (!obj || Object.keys(obj).length === 0) {
+                    return '<li class="text-sm text-gray-500">No data available</li>';
+                }
+                return Object.entries(obj)
+                    .map(([key, value]) => `
+                        <li class="flex justify-between text-sm text-gray-700">
+                            <span class="font-medium">${key}</span>
+                            <span>${value}</span>
+                        </li>
+                    `)
+                    .join('');
+            };
+
+            const topDevicesRows = (hardwareNetworkReport?.topBandwidthDevices || [])
+                .map(device => `
+                    <li class="flex justify-between text-sm text-gray-700">
+                        <span class="font-medium">${device.deviceId}</span>
+                        <span>${device.bandwidthMB} MB</span>
+                    </li>
+                `).join('') || '<li class="text-sm text-gray-500">No network data available</li>';
+
+            const staleSystems = (backupRecoveryReport?.systemsWithoutRecentBackup || []);
+
+            content.innerHTML = `
+                <div class="space-y-4">
+                    <section class="border border-gray-200 rounded-lg p-4">
+                        <h4 class="text-lg font-semibold text-gray-800 mb-3">Assets Report</h4>
+                        <ul class="space-y-2">
+                            <li class="flex justify-between text-sm text-gray-700"><span class="font-medium">Total Assets</span><span>${assetsReport?.totalAssets ?? 0}</span></li>
+                            <li>
+                                <p class="text-sm font-medium text-gray-700 mb-1">Assets per Department</p>
+                                <ul class="pl-4 space-y-1">
+                                    ${formatObjectList(assetsReport?.assetsPerDepartment)}
+                                </ul>
+                            </li>
+                            <li class="flex justify-between text-sm text-gray-700"><span class="font-medium">Assets Under Maintenance</span><span>${assetsReport?.assetsUnderMaintenance ?? 0}</span></li>
+                            <li class="flex justify-between text-sm text-gray-700"><span class="font-medium">Warranty Expiring (30 days)</span><span>${assetsReport?.assetsExpiringWarrantySoon ?? 0}</span></li>
+                        </ul>
+                    </section>
+
+                    <section class="border border-gray-200 rounded-lg p-4">
+                        <h4 class="text-lg font-semibold text-gray-800 mb-3">Software License Report</h4>
+                        <ul class="space-y-2 text-sm text-gray-700">
+                            <li class="flex justify-between"><span class="font-medium">Total Licensed Software</span><span>${softwareLicenseReport?.totalLicensedSoftware ?? 0}</span></li>
+                            <li class="flex justify-between"><span class="font-medium">Active Licenses</span><span>${softwareLicenseReport?.activeLicenses ?? 0}</span></li>
+                            <li class="flex justify-between"><span class="font-medium">Licenses Expiring (30 days)</span><span>${softwareLicenseReport?.licensesExpiringIn30Days ?? 0}</span></li>
+                            <li class="flex justify-between"><span class="font-medium">Expired Licenses</span><span>${softwareLicenseReport?.expiredLicenses ?? 0}</span></li>
+                        </ul>
+                    </section>
+
+                    <section class="border border-gray-200 rounded-lg p-4">
+                        <h4 class="text-lg font-semibold text-gray-800 mb-3">Hardware & Network Monitoring Report</h4>
+                        <ul class="space-y-2 text-sm text-gray-700">
+                            <li class="flex justify-between"><span class="font-medium">Average CPU Load</span><span>${hardwareNetworkReport?.averageCpuLoad ?? 0}%</span></li>
+                            <li class="flex justify-between"><span class="font-medium">Average RAM Utilization</span><span>${hardwareNetworkReport?.averageMemoryUtilization ?? 0}%</span></li>
+                            <li class="flex justify-between"><span class="font-medium">Average Disk Utilization</span><span>${hardwareNetworkReport?.averageDiskUtilization ?? 0}%</span></li>
+                            <li class="flex justify-between"><span class="font-medium">Alerts Triggered Today</span><span>${hardwareNetworkReport?.alertsToday ?? 0}</span></li>
+                            <li class="flex justify-between"><span class="font-medium">Alerts Triggered This Week</span><span>${hardwareNetworkReport?.alertsThisWeek ?? 0}</span></li>
+                            <li>
+                                <p class="font-medium text-sm text-gray-700 mb-1">Top 5 Devices by Bandwidth Usage</p>
+                                <ul class="pl-4 space-y-1">
+                                    ${topDevicesRows}
+                                </ul>
+                            </li>
+                        </ul>
+                    </section>
+
+                    <section class="border border-gray-200 rounded-lg p-4">
+                        <h4 class="text-lg font-semibold text-gray-800 mb-3">Backup & Recovery Report</h4>
+                        <ul class="space-y-2 text-sm text-gray-700">
+                            <li class="flex justify-between"><span class="font-medium">Backups Run This Week</span><span>${backupRecoveryReport?.backupsRunThisWeek ?? 0}</span></li>
+                            <li class="flex justify-between"><span class="font-medium">Successful Backups</span><span>${backupRecoveryReport?.successfulBackups ?? 0}</span></li>
+                            <li class="flex justify-between"><span class="font-medium">Failed Backups</span><span>${backupRecoveryReport?.failedBackups ?? 0}</span></li>
+                            <li class="flex justify-between"><span class="font-medium">Missed Backups</span><span>${backupRecoveryReport?.missedBackups ?? 0}</span></li>
+                            <li>
+                                <p class="font-medium text-sm text-gray-700 mb-1">Systems without Recent Backup (&gt; 7 days)</p>
+                                <ul class="pl-4 space-y-1">
+                                    ${
+                                        staleSystems.length
+                                            ? staleSystems.map(assetId => `<li>${assetId}</li>`).join('')
+                                            : '<li class="text-sm text-gray-500">All systems backed up recently.</li>'
+                                    }
+                                </ul>
+                            </li>
+                        </ul>
+                    </section>
+
+                    <section class="border border-gray-200 rounded-lg p-4">
+                        <h4 class="text-lg font-semibold text-gray-800 mb-3">Department Asset Utilization</h4>
+                        <ul class="pl-4 space-y-1">
+                            ${formatObjectList(departmentAssetReport?.assetsPerDepartment)}
+                        </ul>
+                    </section>
+                </div>
+            `;
+        }
+
         // Audit Log
         async function loadAuditLog() {
             try {
@@ -1323,6 +1533,21 @@
             if (closeUserAssetsBtn) {
                 closeUserAssetsBtn.addEventListener('click', () => {
                     document.getElementById('userAssetsModal').classList.add('hidden');
+                });
+            }
+
+            const reportsBtn = document.getElementById('generateReportBtn');
+            if (reportsBtn) {
+                reportsBtn.addEventListener('click', generateReports);
+            }
+            const downloadReportCsvBtn = document.getElementById('downloadReportCsvBtn');
+            if (downloadReportCsvBtn) {
+                downloadReportCsvBtn.addEventListener('click', downloadReportsCsv);
+            }
+            const closeReportsBtn = document.getElementById('closeReportsModal');
+            if (closeReportsBtn) {
+                closeReportsBtn.addEventListener('click', () => {
+                    document.getElementById('reportsModal').classList.add('hidden');
                 });
             }
 
