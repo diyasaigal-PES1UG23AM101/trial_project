@@ -887,6 +887,43 @@ def assets():
             )
             return jsonify(asset.to_dict())
 
+@app.route('/api/assets/export', methods=['GET'])
+def export_employee_assets():
+    """Allow employees to download their asset list as CSV."""
+    global current_role, current_user_name, current_user, is_authenticated
+
+    if not is_authenticated or current_role != "Employee":
+        return jsonify({"error": "Insufficient permissions"}), 403
+
+    target_user = (current_user_name or current_user or "").strip()
+    query = Asset.query
+    if target_user:
+        query = query.filter(Asset.assigned_user == target_user)
+    assets = query.order_by(Asset.asset_id.asc()).all()
+
+    csv_buffer = io.StringIO()
+    writer = csv.writer(csv_buffer)
+    writer.writerow(["Asset ID", "Asset Type", "Assigned User", "Purchase Date", "Warranty Expiry Date", "Department", "Status"])
+    for asset in assets:
+        writer.writerow([
+            asset.asset_id,
+            asset.asset_type,
+            asset.assigned_user,
+            asset.purchase_date.strftime("%Y-%m-%d"),
+            asset.warranty_expiry_date.strftime("%Y-%m-%d"),
+            asset.department,
+            asset.status,
+        ])
+
+    csv_buffer.seek(0)
+    sanitized_user = target_user.lower().replace(" ", "_") if target_user else "employee"
+    filename = f"{sanitized_user or 'employee'}_report.csv"
+    return Response(
+        csv_buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 @app.route('/api/licenses', methods=['GET', 'POST'])
 def licenses():
     """CRUD operations for licenses"""

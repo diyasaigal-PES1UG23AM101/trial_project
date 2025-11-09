@@ -172,9 +172,14 @@
             <section id="assets" class="mb-6 sm:mb-8">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
                     <h2 class="text-xl sm:text-2xl font-semibold text-gray-800">Asset Management</h2>
-                    <button id="addAssetBtn" class="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm sm:text-base">
-                        + Add Asset
-                    </button>
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <button id="downloadEmployeeAssetsBtn" class="px-3 sm:px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm sm:text-base hidden">
+                            Download Employee Report
+                        </button>
+                        <button id="addAssetBtn" class="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm sm:text-base">
+                            + Add Asset
+                        </button>
+                    </div>
                 </div>
                 <div id="assetFilters" class="hidden w-full sm:w-auto flex flex-col sm:flex-row gap-2 mb-4">
                     <div>
@@ -809,6 +814,17 @@
                 }
             }
 
+            const employeeCsvBtn = document.getElementById('downloadEmployeeAssetsBtn');
+            if (employeeCsvBtn) {
+                if (isEmployee) {
+                    employeeCsvBtn.classList.remove('hidden');
+                    employeeCsvBtn.disabled = false;
+                } else {
+                    employeeCsvBtn.classList.add('hidden');
+                    employeeCsvBtn.disabled = true;
+                }
+            }
+
             const employeeAlertsSection = document.getElementById('employeeAlertsSection');
             const employeeAlertsContent = document.getElementById('employeeAlertsContent');
             if (employeeAlertsSection) {
@@ -1119,6 +1135,32 @@
                     ${alertItems}
                 </div>
             `;
+        }
+
+        async function downloadEmployeeAssetsCsv() {
+            try {
+                const response = await fetch(`${API_BASE}/assets/export`);
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    alert(data.error || 'Unable to download assets report.');
+                    return;
+                }
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                const disposition = response.headers.get('Content-Disposition') || '';
+                const match = disposition.match(/filename="?([^"]+)"?/i);
+                const filename = match ? match[1] : 'my-assets.csv';
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error('Error downloading employee assets CSV:', error);
+                alert('Unable to download assets report at this time.');
+            }
         }
 
         function updateAssetFilterOptions(assets) {
@@ -2119,6 +2161,11 @@
                     alert('Error saving asset');
                 }
             });
+
+            const downloadEmployeeAssetsBtn = document.getElementById('downloadEmployeeAssetsBtn');
+            if (downloadEmployeeAssetsBtn) {
+                downloadEmployeeAssetsBtn.addEventListener('click', downloadEmployeeAssetsCsv);
+            }
 
             // License modal
             document.getElementById('addLicenseBtn').addEventListener('click', () => openLicenseModal('create'));

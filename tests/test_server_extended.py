@@ -537,6 +537,24 @@ class IIMSExtendedTestCase(unittest.TestCase):
         self.assertGreater(len(assets), 0)
         self.assertTrue(all(asset['assignedUser'] == 'Alice Johnson' for asset in assets))
 
+    def test_employee_can_download_assets_csv(self):
+        """Employee can download their assets as CSV"""
+        self.app.post('/api/auth/login',
+                     json={'username': 'employee', 'password': 'emp123'})
+        response = self.app.get('/api/assets/export')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('text/csv', response.headers.get('Content-Type', ''))
+        content = response.data.decode('utf-8')
+        self.assertIn('Asset ID', content)
+        self.assertIn('Alice Johnson', content)
+
+    def test_itstaff_cannot_download_employee_assets_csv(self):
+        """Non-employee roles should not access employee asset CSV endpoint"""
+        self.app.post('/api/auth/login',
+                     json={'username': 'itstaff', 'password': 'it123'})
+        response = self.app.get('/api/assets/export')
+        self.assertEqual(response.status_code, 403)
+
     def test_employee_cannot_comment_on_backup(self):
         """Employees are denied backup comment updates"""
         self.app.post('/api/auth/login',
