@@ -273,7 +273,7 @@ def can_perform_crud(role):
 def calculate_dashboard_metrics():
     """Calculate dashboard metrics from all database tables."""
     total_assets = Asset.query.count()
-
+    
     today = date.today()
     expiry_threshold = today + timedelta(days=90)
     licenses_expiring_soon = (
@@ -289,13 +289,29 @@ def calculate_dashboard_metrics():
     network_events = NetworkDevice.query.filter(
         or_(NetworkDevice.is_downtime.is_(True), NetworkDevice.abnormal_traffic.is_(True))
     ).count()
+    
+    hardware_alert_details = [
+        hw.to_dict()
+        for hw in HardwareHealthRecord.query.filter(
+            or_(HardwareHealthRecord.cpu_load > 85, HardwareHealthRecord.is_overheating.is_(True))
+        ).order_by(HardwareHealthRecord.last_check.desc()).limit(20)
+    ]
+
+    network_alert_details = [
+        net.to_dict()
+        for net in NetworkDevice.query.filter(
+            or_(NetworkDevice.is_downtime.is_(True), NetworkDevice.abnormal_traffic.is_(True))
+        ).order_by(NetworkDevice.device_id.asc()).limit(20)
+    ]
 
     return {
         "totalAssets": total_assets,
         "licensesExpiringSoon": licenses_expiring_soon,
         "hardwareHealthAlerts": hardware_alerts,
+        "hardwareAlertDetails": hardware_alert_details,
         "backupFailures": backup_failures,
         "networkEvents": network_events,
+        "networkAlertDetails": network_alert_details,
     }
 
 

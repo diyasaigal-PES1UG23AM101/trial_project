@@ -367,6 +367,14 @@
                 </div>
             </section>
 
+            <!-- Critical Alerts Section (Admin Only) -->
+            <section id="criticalAlertsSection" class="mb-6 sm:mb-8 hidden">
+                <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">Critical Alerts</h2>
+                <div id="criticalAlertsContent" class="space-y-4">
+                    <p class="text-sm text-gray-500">No active alerts.</p>
+                </div>
+            </section>
+
             <!-- Asset Logs Section (Admin Only) -->
             <section id="assetLogsSection" class="mb-6 sm:mb-8 hidden">
                 <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">Asset Logs</h2>
@@ -824,6 +832,8 @@
                 } else {
                     alertBanner.classList.add('hidden');
                 }
+
+                renderCriticalAlerts(metrics.hardwareAlertDetails || [], metrics.networkAlertDetails || []);
             } catch (error) {
                 console.error('Error loading dashboard:', error);
             }
@@ -1516,6 +1526,63 @@
             if (Number.isNaN(date.getTime())) return null;
             const pad = (num) => String(num).padStart(2, '0');
             return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+        }
+
+        function renderCriticalAlerts(hardwareAlerts, networkAlerts) {
+            const section = document.getElementById('criticalAlertsSection');
+            const content = document.getElementById('criticalAlertsContent');
+            if (!section || !content) return;
+
+            const hasAlerts = (hardwareAlerts && hardwareAlerts.length > 0) || (networkAlerts && networkAlerts.length > 0);
+
+            if ((currentRole || '').toLowerCase() !== 'admin' || !hasAlerts) {
+                section.classList.add('hidden');
+                content.innerHTML = '<p class="text-sm text-gray-500">No active alerts.</p>';
+                return;
+            }
+
+            section.classList.remove('hidden');
+            content.innerHTML = '';
+
+            if (hardwareAlerts && hardwareAlerts.length > 0) {
+                const hardwareCard = document.createElement('div');
+                hardwareCard.className = 'border border-red-200 bg-red-50 rounded-lg p-4';
+                const items = hardwareAlerts.map(alert => `
+                    <li class="text-sm text-red-700">
+                        <span class="font-semibold">${alert.deviceId}</span> -
+                        CPU ${alert.cpuLoad}% / Memory ${alert.memoryUtil}% -
+                        Overheating: ${alert.isOverheating ? 'Yes' : 'No'} -
+                        Last Check: ${alert.lastCheck}
+                    </li>
+                `).join('');
+                hardwareCard.innerHTML = `
+                    <h3 class="text-sm font-semibold text-red-800 mb-2">Hardware Alerts</h3>
+                    <ul class="space-y-1">
+                        ${items}
+                    </ul>
+                `;
+                content.appendChild(hardwareCard);
+            }
+
+            if (networkAlerts && networkAlerts.length > 0) {
+                const networkCard = document.createElement('div');
+                networkCard.className = 'border border-yellow-200 bg-yellow-50 rounded-lg p-4';
+                const items = networkAlerts.map(alert => `
+                    <li class="text-sm text-yellow-800">
+                        <span class="font-semibold">${alert.deviceId}</span> -
+                        Bandwidth ${alert.bandwidthMB} MB -
+                        Downtime: ${alert.isDowntime ? 'Yes' : 'No'} -
+                        Abnormal Traffic: ${alert.abnormalTraffic ? 'Yes' : 'No'}
+                    </li>
+                `).join('');
+                networkCard.innerHTML = `
+                    <h3 class="text-sm font-semibold text-yellow-800 mb-2">Network Alerts</h3>
+                    <ul class="space-y-1">
+                        ${items}
+                    </ul>
+                `;
+                content.appendChild(networkCard);
+            }
         }
 
         function populateReportsModal(reportData) {
