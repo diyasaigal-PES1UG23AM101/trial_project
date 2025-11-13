@@ -1,0 +1,14 @@
+[33mcommit ab548866ef81f4332f06a990d89531a88ddb634f[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mdevelop[m[33m, [m[1;31morigin/story-2.1-submission-final-fix[m[33m, [m[1;31morigin/story-2.1-final-merge[m[33m, [m[1;31morigin/develop[m[33m, [m[1;32mstory-2.1-submission-final-fix[m[33m, [m[1;32mstory-2.1-final-merge[m[33m, [m[1;32mfeature/story-2.2-read-assets[m[33m)[m
+Merge: a0e247b e402f24
+Author: Dhrithi Kiran <pes1ug23am099@pesu.pes.edu>
+Date:   Wed Nov 5 18:56:45 2025 +0530
+
+    Merge pull request #6 from pestechnology/feature/3.1-dashboard-layout
+    
+    Feature/3.1 dashboard layout
+
+[33mcommit e402f24cf86c5dd755b9e04e04972ec6175ffbe8[m[33m ([m[1;31morigin/feature/3.1-dashboard-layout[m[33m)[m
+Author: Dhrithi Kiran <dhrithikiran@Dhrithis-MacBook-Pro.local>
+Date:   Wed Nov 5 18:46:35 2025 +0530
+
+    fix(deps): Regenerate package-lock.json to fix CI build error

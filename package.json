@@ -1,0 +1,101 @@
+{
+  "name": "it-infra-mgmt",
+  "version": "0.1.0",
+  "scripts": {
+    "test": "jest --runInBand",
+    "coverage": "jest --coverage",
+    "dev": "nodemon server.js",
+    "lint": "eslint . --ext .js,.jsx",
+    "lint:fix": "eslint . --ext .js,.jsx --fix"
+  },
+  "devDependencies": {
+    "@babel/preset-env": "^7.23.5",
+    "@babel/preset-react": "^7.23.3",
+    "@eslint/js": "^9.39.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^14.3.1",
+    "@testing-library/user-event": "^14.5.1",
+    "babel-jest": "^29.7.0",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react": "^7.37.5",
+    "globals": "^16.5.0",
+    "identity-obj-proxy": "^3.0.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "nodemon": "^3.1.10",
+    "supertest": "^6.3.4"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.15.3"
+  },
+  "jest": {
+    "projects": [
+      {
+        "displayName": "backend",
+        "testMatch": [
+          "<rootDir>/backend/tests/**/*.test.js"
+        ],
+        "testEnvironment": "node",
+        "collectCoverageFrom": [
+          "backend/src/**/*.js",
+          "backend/server.js",
+          "!backend/src/**/*.test.js"
+        ],
+        "moduleNameMapper": {
+          "^@/(.*)$": "<rootDir>/backend/$1"
+        }
+      },
+      {
+        "displayName": "frontend",
+        "testMatch": [
+          "<rootDir>/frontend/src/**/__tests__/**/*.test.js"
+        ],
+        "testEnvironment": "jsdom",
+        "setupFilesAfterEnv": [
+          "<rootDir>/frontend/src/setupTests.js"
+        ],
+        "moduleNameMapper": {
+          "\\.(css|less|scss|sass)$": "identity-obj-proxy"
+        },
+        "transform": {
+          "^.+\\.(js|jsx)$": [
+            "babel-jest",
+            {
+              "presets": [
+                [
+                  "@babel/preset-env",
+                  {
+                    "targets": {
+                      "node": "current"
+                    }
+                  }
+                ],
+                [
+                  "@babel/preset-react",
+                  {
+                    "runtime": "automatic"
+                  }
+                ]
+              ]
+            }
+          ]
+        },
+        "transformIgnorePatterns": [
+          "node_modules/(?!(axios)/)"
+        ]
+      },
+      {
+        "displayName": "root",
+        "testMatch": [
+          "<rootDir>/tests/**/*.test.js"
+        ],
+        "testEnvironment": "node"
+      }
+    ]
+  }
+}
